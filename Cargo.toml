@@ -1,0 +1,19 @@
+[package]
+name = "pdf-terminal-reader"
+version = "0.1.0"
+authors = ["zlatan"]
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.81"
+base64 = "0.22.0"
+chardetng = "0.1.17"
+clap = "4.5.2"
+crossterm = { version = "0.27.0", features = ["event-stream"] }
+encoding_rs = "0.8.33"
+futures = "0.3.30"
+image = "0.25.0"
+lopdf = "0.32.0"
+ratatui = "0.26.0"
+tokio = { version = "1.35.1", features = ["full"] }
