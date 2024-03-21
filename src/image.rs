@@ -1,21 +1,23 @@
-use std::fs;
-use std::io::{stderr, stdout, Write};
-use std::path::Path;
+use std::io::{stdout, Write};
 use base64::Engine;
 use base64::engine::general_purpose;
 use crossterm::cursor::{MoveTo, RestorePosition, SavePosition};
 use crossterm::queue;
 use ratatui::prelude::Rect;
+use tokio::sync::{Mutex};
+use crate::pdf::PdfSize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ImageHandler {
     image_area: Option<Rect>,
+    pdf_lock: Mutex<()>,
 }
 
 impl ImageHandler {
     pub fn new() -> Self {
         Self {
-            image_area: None
+            image_area: None,
+            pdf_lock: Mutex::new(()),
         }
     }
 
@@ -24,16 +26,17 @@ impl ImageHandler {
     }
 
 
-    pub async fn render_image(area: Rect, image_data: &[u8]) -> anyhow::Result<()> {
+    pub fn render_image(&self, image_data: &[u8], pdf_size: &PdfSize) -> anyhow::Result<()> {
         let b64 = general_purpose::STANDARD.encode(image_data);
         let mut buf = vec![];
         write!(buf, "\x1b]1337;File=inline=1;size={};width={}px;height={}px;doNotMoveCursor=1:{}\x07",
                image_data.len(),
-               2000,
-               3000,
+               pdf_size.width(),
+               pdf_size.height(),
                b64
         )?;
-        move_lock(stdout().lock(), (area.x, area.y), |stdout| {
+        let _lock = self.pdf_lock.lock();
+        move_lock(stdout().lock(), (pdf_size.x(), pdf_size.y()), |stdout| {
             stdout.write_all(&buf)?;
             Ok(1)
         })?;

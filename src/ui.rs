@@ -4,20 +4,52 @@ use ratatui::{
     Frame,
 };
 use ratatui::prelude::*;
-use ratatui::widgets::{Borders, List, ListItem};
-use tokio::sync::mpsc;
+use ratatui::widgets::{Borders, List, ListItem, Paragraph};
 
 use crate::app::{App};
-use crate::event::Event;
-use crate::pdf::{BookMark, BookMarkIndex, PdfHandler};
+use crate::emit;
+use crate::pdf::{BookMark, BookMarkIndex};
 
 /// Renders the user interface widgets.
-pub fn render(app: &mut App, frame: &mut Frame, sender: mpsc::UnboundedSender<Event>) {
+pub fn render(app: &mut App, frame: &mut Frame) {
+    // left side => catalog
     let chunk = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(20), Constraint::Fill(1)])
         .split(frame.size());
-    // left side => catalog
+    render_catalog(app, frame, chunk[0]);
+
+    // right side => pdf preview
+    let chunk = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(2), Constraint::Fill(1)])
+        .split(chunk[1]);
+
+    render_pdf(app, chunk[1]);
+
+    render_title(app, frame, chunk[0]);
+}
+
+fn render_title(app: &mut App, frame: &mut Frame, chunk: Rect) {
+    let loading = if app.loading { String::from("加载中...") } else { String::new() };
+    let title = Paragraph::new(Line::from(Span::styled(
+        format!("第 {}/{} 页  {loading}", app.cur_page, app.pdf_handler.get_page_nums()),
+        Style::default().green(),
+    )));
+
+    frame.render_widget(title, chunk);
+}
+
+fn render_pdf(app: &mut App, chunk: Rect) {
+    if !app.already_render {
+        app.already_render = true;
+        app.loading = true;
+        app.pdf_size.update(&chunk);
+        emit!(LoadingFirst(app.cur_page));
+    }
+}
+
+fn render_catalog(app: &mut App, frame: &mut Frame, chunk: Rect) {
     let book_marks = app.pdf_handler.get_book_marks();
     let mut items: Vec<ListItem> = vec![];
     let mut index_vec: Vec<BookMarkIndex> = vec![];
@@ -28,18 +60,7 @@ pub fn render(app: &mut App, frame: &mut Frame, sender: mpsc::UnboundedSender<Ev
         .block(Block::default().title(app.pdf_handler.get_title().as_str()).borders(Borders::RIGHT))
         .highlight_style(Style::new().red().italic())
         .highlight_symbol("*");
-    frame.render_stateful_widget(list_widget, chunk[0], &mut app.book_marks_state);
-    // right side => pdf preview
-    if !app.already_render {
-        app.already_render = true;
-        let page_path = app.page_cache.get_page(app.cur_page);
-        let pdf_path = app.pdf_handler.get_pdf_path().to_string();
-        tokio::spawn(
-            PdfHandler::render_pdf_page(
-                pdf_path, page_path, app.cur_page, chunk[1].clone(), sender,
-            )
-        );
-    }
+    frame.render_stateful_widget(list_widget, chunk, &mut app.book_marks_state);
 }
 
 fn parse_book_marks_item(book_marks: &Vec<BookMark>, items: &mut Vec<ListItem>,

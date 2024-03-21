@@ -1,8 +1,8 @@
-use crate::app::{App, AppResult};
+use crate::app::{App};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Handles the key events and updates the state of [`App`].
-pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
+pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> anyhow::Result<()> {
     match key_event.code {
         // Exit application on `ESC` or `q`
         KeyCode::Esc | KeyCode::Char('q') => {
@@ -35,13 +35,15 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Up => {
             app.previous_page();
         }
+        KeyCode::Char('+') => {
+            app.increment_pdf_size()
+        }
+        KeyCode::Char('-') => {
+            app.decrement_pdf_size()
+        }
         // Counter handlers
-        KeyCode::Right => {
-            app.increment_counter();
-        }
-        KeyCode::Left => {
-            app.decrement_counter();
-        }
+        KeyCode::Right => {}
+        KeyCode::Left => {}
         // Other handlers you could add here.
         _ => {}
     }

@@ -1,10 +1,11 @@
 use std::time::Duration;
 
-use crossterm::event::{Event as CrosstermEvent, KeyEvent, MouseEvent};
+use crossterm::event::{Event as CrosstermEvent, KeyEvent};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc;
+use crate::ro_cell::RoCell;
 
-use crate::app::AppResult;
+static TX: RoCell<mpsc::UnboundedSender<Event>> = RoCell::new();
 
 /// Terminal events.
 #[derive(Clone, Copy, Debug)]
@@ -14,11 +15,15 @@ pub enum Event {
     /// Key press.
     Key(KeyEvent),
     /// Mouse click/scroll.
-    Mouse(MouseEvent),
+    // Mouse(MouseEvent),
     /// Terminal resize.
     Resize(u16, u16),
-    /// save pdf page
-    SavePdfPage(u32),
+    /// render current pdf page
+    RenderPdf,
+    /// Load next pdf page
+    LoadingNext,
+    /// load pdf first
+    LoadingFirst(u32),
 }
 
 /// Terminal event handler.
@@ -31,6 +36,16 @@ pub struct EventHandler {
     receiver: mpsc::UnboundedReceiver<Event>,
     /// Event handler thread.
     handler: tokio::task::JoinHandle<()>,
+}
+
+impl Event {
+    pub fn init(tx: mpsc::UnboundedSender<Event>) {
+        TX.init(tx);
+    }
+
+    pub fn emit(self) {
+        TX.send(self).ok();
+    }
 }
 
 impl EventHandler {
@@ -59,8 +74,8 @@ impl EventHandler {
                           _sender.send(Event::Key(key)).unwrap();
                         }
                       },
-                      CrosstermEvent::Mouse(mouse) => {
-                        _sender.send(Event::Mouse(mouse)).unwrap();
+                      CrosstermEvent::Mouse(_mouse) => {
+                        // _sender.send(Event::Mouse(mouse)).unwrap();
                       },
                       CrosstermEvent::Resize(x, y) => {
                         _sender.send(Event::Resize(x, y)).unwrap();
@@ -77,6 +92,7 @@ impl EventHandler {
                 ;
             }
         });
+        Event::init(sender.clone());
         Self {
             sender,
             receiver,
@@ -88,17 +104,29 @@ impl EventHandler {
     ///
     /// This function will always block the current thread if
     /// there is no data available and it's possible for more data to be sent.
-    pub async fn next(&mut self) -> AppResult<Event> {
-        self.receiver
+    pub async fn next(&mut self) -> anyhow::Result<Event> {
+        let event = self.receiver
             .recv()
             .await
-            .ok_or(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "This is an IO error",
-            )))
+            .unwrap();
+        Ok(event)
     }
 
     pub fn get_sender(&self) -> mpsc::UnboundedSender<Event> {
         self.sender.clone()
     }
+}
+
+
+#[macro_export]
+macro_rules! emit {
+    (RenderPdf) => {
+        $crate::event::Event::RenderPdf.emit();
+    };
+    (LoadingFirst($page_id: expr)) => {
+        $crate::event::Event::LoadingFirst($page_id).emit();
+    };
+    (LoadingNext) => {
+        $crate::event::Event::LoadingNext.emit();
+    };
 }

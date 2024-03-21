@@ -1,18 +1,20 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs;
 use std::path::Path;
-use std::process::{Command, ExitStatus};
 use lopdf::{Document, Object, ObjectId, Outline};
 use ratatui::prelude::Rect;
-use tokio::sync::mpsc;
-use crate::cache::FileCache;
 use crate::decode::decode_str_to_utf8;
-use crate::event::Event;
-use crate::image::ImageHandler;
 
 
 pub type BookMarkIndex = Vec<usize>;
+
+#[derive(Debug, Clone)]
+pub struct PdfSize {
+    x: u16,
+    y: u16,
+    width: f32,
+    height: f32,
+}
 
 #[derive(Debug)]
 pub struct PdfHandler {
@@ -97,7 +99,7 @@ impl BookMark {
 impl PdfHandler {
     pub fn new(path: &str) -> Self {
         let document = Document::load(path).expect("pdf file not found");
-        let mut title = OsString::from(Path::new(path).file_stem().unwrap()).into_string().unwrap();
+        let title = OsString::from(Path::new(path).file_stem().unwrap()).into_string().unwrap();
         // TODO parse title
         // if let Ok(Object::Reference(info_id)) = document.trailer.get(b"Info") {
         //     if let Ok(info) = document.get_dictionary(info_id.clone()) {
@@ -207,16 +209,45 @@ impl PdfHandler {
             book_marks.push(book_mark);
         }
     }
+}
 
-    pub async fn render_pdf_page(pdf_path: String, page_path: (String, bool),
-                                 page_id: u32, area: Rect, sender: mpsc::UnboundedSender<Event>) {
-        let mut image_data;
-        let (page_path, exists) = page_path;
-        if exists {
-            image_data = fs::read(&page_path).expect("read page data error");
-        } else {
-            image_data = FileCache::convert_pdf_to_ppm(&pdf_path, &page_path, page_id, sender);
+impl PdfSize {
+    pub fn new(width: f32, height: f32, x: u16, y: u16) -> Self {
+        Self {
+            width,
+            height,
+            x,
+            y,
         }
-        ImageHandler::render_image(area, &image_data).await.expect("render image failed");
+    }
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+
+    pub fn x(&self) -> u16 {
+        self.x
+    }
+
+    pub fn y(&self) -> u16 {
+        self.y
+    }
+
+    pub(crate) fn increment(&mut self) {
+        self.width *= 1.1;
+        self.height *= 1.1;
+    }
+
+    pub(crate) fn decrement(&mut self) {
+        self.width *= 0.9;
+        self.height *= 0.9;
+    }
+
+    pub(crate) fn update(&mut self, rect: &Rect) {
+        self.x = rect.x;
+        self.y = rect.y;
     }
 }

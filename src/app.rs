@@ -1,19 +1,13 @@
-use std::error;
 use ratatui::widgets::ListState;
 use crate::cache::FileCache;
 use crate::image::ImageHandler;
-use crate::pdf::{BookMarkIndex, PdfHandler};
-
-/// Application result type.
-pub type AppResult<T> = std::result::Result<T, Box<dyn error::Error>>;
+use crate::pdf::{BookMarkIndex, PdfHandler, PdfSize};
 
 /// Application.
 #[derive(Debug)]
 pub struct App {
     /// Is the application running?
     pub running: bool,
-    /// counter
-    pub counter: u8,
     /// pdf handler
     pub pdf_handler: PdfHandler,
     /// image handler
@@ -26,8 +20,14 @@ pub struct App {
     pub cur_page: u32,
     /// Is the pdf already render?
     pub already_render: bool,
+    /// loading pdf?
+    pub loading: bool,
     /// pdf to jpeg page cache
     pub page_cache: FileCache,
+    /// pdf preview width * height
+    pub pdf_size: PdfSize,
+    /// backend load page
+    pub next_load_page: u32,
 }
 
 
@@ -36,35 +36,25 @@ impl App {
     pub fn new(path: &str) -> Self {
         Self {
             running: true,
-            counter: 0,
             pdf_handler: PdfHandler::new(path),
             image_handler: ImageHandler::new(),
             book_marks_state: ListState::default(),
             ui_book_marks: None,
-            cur_page: 0,
+            cur_page: 1,
             already_render: false,
+            loading: true,
             page_cache: FileCache::new(path.to_string()),
+            pdf_size: PdfSize::new(1200.0, 1500.0, 0, 0),
+            next_load_page: 2,
         }
     }
 
     /// Handles the tick event of the terminal.
-    pub fn tick(&self) {}
+    pub fn tick(&mut self) {}
 
     /// Set running to false to quit the application.
     pub fn quit(&mut self) {
         self.running = false;
-    }
-
-    pub fn increment_counter(&mut self) {
-        if let Some(res) = self.counter.checked_add(1) {
-            self.counter = res;
-        }
-    }
-
-    pub fn decrement_counter(&mut self) {
-        if let Some(res) = self.counter.checked_sub(1) {
-            self.counter = res;
-        }
     }
 
     pub(crate) fn book_marks_previous(&mut self) {
@@ -125,5 +115,16 @@ impl App {
             self.cur_page -= 1;
             self.already_render = false;
         }
+    }
+
+    pub(crate) fn increment_pdf_size(&mut self) {
+        self.already_render = false;
+        self.pdf_size.increment();
+    }
+
+    pub(crate) fn decrement_pdf_size(&mut self) {
+        self.already_render = false;
+        self.pdf_size.decrement();
+        // clear screen
     }
 }

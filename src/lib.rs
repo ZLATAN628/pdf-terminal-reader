@@ -26,3 +26,17 @@ pub mod image;
 
 /// pdf page to jpeg cache
 pub mod cache;
+mod ro_cell;
+
+
+#[cfg(test)]
+mod tests {
+    use crate::pdf::PdfHandler;
+    use super::*;
+
+    #[test]
+    fn book_mark_test() {
+        let pdf_handler = PdfHandler::new("/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf");
+
+    }
+}
