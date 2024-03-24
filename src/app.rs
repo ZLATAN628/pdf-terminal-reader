@@ -3,6 +3,13 @@ use crate::cache::FileCache;
 use crate::image::ImageHandler;
 use crate::pdf::{BookMarkIndex, PdfHandler, PdfSize};
 
+#[derive(Debug, Clone)]
+pub enum AppState {
+    Normal,
+    Search(String),
+    JumpPage(String),
+}
+
 /// Application.
 #[derive(Debug)]
 pub struct App {
@@ -28,6 +35,8 @@ pub struct App {
     pub pdf_size: PdfSize,
     /// backend load page
     pub next_load_page: u32,
+    /// state
+    pub app_state: AppState,
 }
 
 
@@ -46,6 +55,7 @@ impl App {
             page_cache: FileCache::new(path.to_string()),
             pdf_size: PdfSize::new(1200.0, 1500.0, 0, 0),
             next_load_page: 2,
+            app_state: AppState::Normal,
         }
     }
 
@@ -104,7 +114,7 @@ impl App {
     }
 
     pub(crate) fn next_page(&mut self) {
-        if self.cur_page < self.pdf_handler.get_page_nums() as u32 - 1 {
+        if self.cur_page < self.pdf_handler.get_page_nums() as u32 {
             self.cur_page += 1;
             self.already_render = false;
         }

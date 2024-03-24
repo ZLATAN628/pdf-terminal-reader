@@ -6,7 +6,7 @@ use ratatui::{
 use ratatui::prelude::*;
 use ratatui::widgets::{Borders, List, ListItem, Paragraph};
 
-use crate::app::{App};
+use crate::app::{App, AppState};
 use crate::emit;
 use crate::pdf::{BookMark, BookMarkIndex};
 
@@ -17,7 +17,19 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(20), Constraint::Fill(1)])
         .split(frame.size());
-    render_catalog(app, frame, chunk[0]);
+    match &app.app_state {
+        AppState::Search(text) => {
+            let chunk = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Fill(1)])
+                .split(chunk[0]);
+            render_search_box(frame, chunk[0], text);
+            render_catalog(app, frame, chunk[1]);
+        }
+        _ => {
+            render_catalog(app, frame, chunk[0]);
+        }
+    }
 
     // right side => pdf preview
     let chunk = Layout::default()
@@ -27,15 +39,42 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     render_pdf(app, chunk[1]);
 
-    render_title(app, frame, chunk[0]);
+    let page_id =
+        if let AppState::JumpPage(page_id) = &app.app_state { Some(page_id.parse::<u32>().unwrap_or(0)) } else { None };
+    render_title(app, frame, chunk[0], page_id);
 }
 
-fn render_title(app: &mut App, frame: &mut Frame, chunk: Rect) {
-    let loading = if app.loading { String::from("加载中...") } else { String::new() };
-    let title = Paragraph::new(Line::from(Span::styled(
-        format!("第 {}/{} 页  {loading}", app.cur_page, app.pdf_handler.get_page_nums()),
+fn render_search_box(frame: &mut Frame, chunk: Rect, text: &String) {
+    let paragraph = Paragraph::new(Line::from(Span::styled(
+        format!("{text}"),
         Style::default().green(),
-    )));
+    ))).block(Block::default().borders(Borders::ALL).border_style(Style::new().blue()));
+    frame.render_widget(paragraph, chunk);
+}
+
+fn render_title(app: &mut App, frame: &mut Frame, chunk: Rect, page_id: Option<u32>) {
+    let loading = if app.loading { String::from("加载中...") } else { String::new() };
+    let mut line = Vec::new();
+    if let Some(page_id) = page_id {
+        line.push(Span::styled(
+            "第 ",
+            Style::default().green(),
+        ));
+        line.push(Span::styled(
+            format!("{page_id}"),
+            Style::default().red(),
+        ));
+        line.push(Span::styled(
+            format!("/{} 页  {loading}", app.pdf_handler.get_page_nums()),
+            Style::default().green(),
+        ))
+    } else {
+        line.push(Span::styled(
+            format!("第 {}/{} 页  {loading}", app.cur_page, app.pdf_handler.get_page_nums()),
+            Style::default().green(),
+        ));
+    }
+    let title = Paragraph::new(Line::from(line));
 
     frame.render_widget(title, chunk);
 }

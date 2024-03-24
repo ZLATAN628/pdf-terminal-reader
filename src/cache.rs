@@ -59,14 +59,16 @@ impl FileCache {
         fs::read(&self.get_page_path(page_id))
     }
 
-    pub async fn load_next_page(&mut self, pdf_path: &str, next_page_id: u32) {
+    pub async fn load_next_page(&mut self, pdf_path: &str, next_page_id: Option<u32>) {
         if let Some(id) = self.page_queue.first() {
             let id = *id;
             self.page_queue.remove(0);
             let page_path = self.get_page_path(id);
             self.convert_pdf_to_ppm(pdf_path.to_string(), page_path, id).await.unwrap();
         }
-        self.page_queue.push(next_page_id);
+        if let Some(next_page_id) = next_page_id {
+            self.page_queue.push(next_page_id);
+        }
     }
 
     pub async fn add_first(&mut self, page_id: u32) {

@@ -3,12 +3,13 @@ use std::time::Duration;
 use crossterm::event::{Event as CrosstermEvent, KeyEvent};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc;
+use crate::app::AppState;
 use crate::ro_cell::RoCell;
 
 static TX: RoCell<mpsc::UnboundedSender<Event>> = RoCell::new();
 
 /// Terminal events.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Event {
     /// Terminal tick.
     Tick,
@@ -24,6 +25,8 @@ pub enum Event {
     LoadingNext,
     /// load pdf first
     LoadingFirst(u32),
+    /// change state
+    ChangeState(AppState),
 }
 
 /// Terminal event handler.
@@ -121,12 +124,15 @@ impl EventHandler {
 #[macro_export]
 macro_rules! emit {
     (RenderPdf) => {
-        $crate::event::Event::RenderPdf.emit();
+        $crate::event::Event::RenderPdf.emit()
     };
     (LoadingFirst($page_id: expr)) => {
-        $crate::event::Event::LoadingFirst($page_id).emit();
+        $crate::event::Event::LoadingFirst($page_id).emit()
     };
     (LoadingNext) => {
-        $crate::event::Event::LoadingNext.emit();
+        $crate::event::Event::LoadingNext.emit()
+    };
+    (ChangeState($state: expr)) => {
+        $crate::event::Event::ChangeState($state).emit()
     };
 }

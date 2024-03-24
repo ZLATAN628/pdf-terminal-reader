@@ -3,24 +3,30 @@ use pdf_terminal_reader::event::{Event, EventHandler};
 use pdf_terminal_reader::handler::handle_key_events;
 use pdf_terminal_reader::tui::Tui;
 use std::io;
+use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use pdf_terminal_reader::emit;
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+pub struct AppArgs {
+    /// pdf path
+    /// if None => last pdf
+    #[arg(short, long)]
+    path: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // ImageHandler::render_image(Rect { x: 40, y: 0, height: 1, width: 1 }, &Path::new("/Users/zlatan/Documents/电子书/test.jpeg")).await.unwrap();
-    // tokio::time::sleep(Duration::from_millis(80000)).await;
-    // return Ok(());
-    // TODO parse args
-    let pdf_path = "/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf";
-    // Create an application.
+    let args = AppArgs::parse();
+    let default_path = String::from("/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf");
+    let pdf_path = args.path.as_ref().unwrap_or(&default_path);
     let mut app = App::new(pdf_path);
 
-    // Initialize the terminal user interface.
     let backend = CrosstermBackend::new(io::stderr());
     let terminal = Terminal::new(backend)?;
-    let events = EventHandler::new(1000);
+    let events = EventHandler::new(100000);
     let mut tui = Tui::new(terminal, events);
     tui.init()?;
 
@@ -47,7 +53,6 @@ async fn main() -> anyhow::Result<()> {
                         app.loading = false;
                         // 继续静默加载
                         if app.next_load_page <= app.pdf_handler.get_page_nums() as u32 {
-                            app.next_load_page += 1;
                             emit!(LoadingNext);
                         }
                     }
@@ -62,7 +67,16 @@ async fn main() -> anyhow::Result<()> {
                 app.page_cache.add_first(page_id).await;
             }
             Event::LoadingNext => {
-                app.page_cache.load_next_page(app.pdf_handler.get_pdf_path(), app.next_load_page).await;
+                let next_page_id = if app.next_load_page <= app.pdf_handler.get_page_nums() as u32 {
+                    Some(app.next_load_page)
+                } else {
+                    None
+                };
+                app.page_cache.load_next_page(app.pdf_handler.get_pdf_path(), next_page_id).await;
+                app.next_load_page += 1;
+            }
+            Event::ChangeState(state) => {
+                app.app_state = state;
             }
         }
     }
