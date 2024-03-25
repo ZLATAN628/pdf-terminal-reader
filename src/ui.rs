@@ -103,7 +103,7 @@ fn render_catalog(app: &mut App, frame: &mut Frame, chunk: Rect) {
 }
 
 fn parse_book_marks_item(book_marks: &Vec<BookMark>, items: &mut Vec<ListItem>,
-                         index_vec: &mut Vec<Vec<usize>>, cur_index: &mut Vec<usize>) {
+                         index_vec: &mut Vec<BookMarkIndex>, cur_index: &mut Vec<usize>) {
     let mut index = 0;
     for bm in book_marks {
         if !bm.is_show() {
@@ -117,7 +117,7 @@ fn parse_book_marks_item(book_marks: &Vec<BookMark>, items: &mut Vec<ListItem>,
             Style::default().fg(Color::Yellow),
         ));
         items.push(ListItem::new(item));
-        index_vec.push(cur_index.clone());
+        index_vec.push(BookMarkIndex::from(cur_index.clone()));
         if !bm.get_sub().is_empty() {
             parse_book_marks_item(bm.get_sub(), items, index_vec, cur_index);
         }

@@ -900,6 +900,8 @@ dependencies = [
  "lazy_static",
  "lopdf",
  "ratatui",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -1063,6 +1065,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.114"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
+dependencies = [
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]

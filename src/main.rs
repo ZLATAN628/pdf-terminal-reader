@@ -6,7 +6,8 @@ use std::io;
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use pdf_terminal_reader::emit;
+use pdf_terminal_reader::{emit};
+use pdf_terminal_reader::history::History;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -22,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
     let args = AppArgs::parse();
     let default_path = String::from("/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf");
     let pdf_path = args.path.as_ref().unwrap_or(&default_path);
-    let mut app = App::new(pdf_path);
+    let mut history = History::init();
+    let mut app = App::new(pdf_path, history.read_last_page_num(pdf_path).unwrap_or(0));
 
     let backend = CrosstermBackend::new(io::stderr());
     let terminal = Terminal::new(backend)?;
@@ -80,8 +82,8 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-
     // Exit the user interface.
     tui.exit()?;
+    history.save_page_num(pdf_path, app.cur_page);
     Ok(())
 }

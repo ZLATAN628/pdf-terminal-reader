@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::ops::Index;
 use std::path::Path;
 use lopdf::{Document, Object, ObjectId, Outline};
 use ratatui::prelude::Rect;
 use crate::decode::decode_str_to_utf8;
 
 
-pub type BookMarkIndex = Vec<usize>;
+#[derive(Debug, Clone)]
+pub struct BookMarkIndex {
+    inner: Vec<usize>,
+}
 
 #[derive(Debug, Clone)]
 pub struct PdfSize {
@@ -143,11 +147,14 @@ impl PdfHandler {
     pub fn find_book_mark(&self, index: &BookMarkIndex) -> Option<&BookMark> {
         let mut bms: &Vec<BookMark> = &self.book_marks;
         for i in 0..index.len() {
-            let bm = bms.get(index[i]).unwrap();
-            if i == index.len() - 1 {
-                return Some(bm);
+            if let Some(bm) = bms.get(index[i]) {
+                if i == index.len() - 1 {
+                    return Some(bm);
+                }
+                bms = &bm.sub;
+            } else {
+                break;
             }
-            bms = &bm.sub;
         }
         None
     }
@@ -155,11 +162,14 @@ impl PdfHandler {
     pub fn find_book_mark_mut(&mut self, index: &BookMarkIndex) -> Option<&mut BookMark> {
         let mut bms: &mut Vec<BookMark> = &mut self.book_marks;
         for i in 0..index.len() {
-            let bm = bms.get_mut(index[i]).unwrap();
-            if i == index.len() - 1 {
-                return Some(bm);
+            if let Some(bm) = bms.get_mut(index[i]) {
+                if i == index.len() - 1 {
+                    return Some(bm);
+                }
+                bms = &mut bm.sub;
+            } else {
+                break;
             }
-            bms = &mut bm.sub;
         }
         None
     }
@@ -250,4 +260,60 @@ impl PdfSize {
         self.x = rect.x;
         self.y = rect.y;
     }
+}
+
+impl From<Vec<usize>> for BookMarkIndex {
+    fn from(value: Vec<usize>) -> Self {
+        Self {
+            inner: value
+        }
+    }
+}
+
+impl From<&[usize]> for BookMarkIndex {
+    fn from(value: &[usize]) -> Self {
+        Self {
+            inner: Vec::from(value)
+        }
+    }
+}
+
+impl Index<usize> for BookMarkIndex {
+    type Output = usize;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.inner[index]
+    }
+}
+
+impl BookMarkIndex {
+    pub fn parent(&self) -> BookMarkIndex {
+        if self.inner.len() > 1 {
+            BookMarkIndex::from(&self.inner[0..self.inner.len() - 1])
+        } else {
+            self.clone()
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    // pub fn next(mut self, pdf_handler: &PdfHandler) -> Option<&BookMark> {
+    //     let mut inner: &mut [usize] = &mut self.inner;
+    //     loop {
+    //         let last = inner.last_mut().unwrap();
+    //         *last += 1;
+    //         match pdf_handler.find_book_mark(inner) {
+    //             Some(book_mark) => return Some(book_mark),
+    //             None => {
+    //                 if inner.len() == 1 {
+    //                     return None;
+    //                 }
+    //                 inner = &mut inner[0..inner.len() - 1];
+    //             }
+    //         }
+    //     }
+    //
+    //     // if inner.len() > 1 {}
+    // }
 }

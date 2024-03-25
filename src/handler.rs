@@ -58,11 +58,17 @@ fn deal_normal_key_event(key_event: KeyEvent, app: &mut App) {
                 app.quit();
             }
         }
-        KeyCode::Char('w') | KeyCode::Char('W') => {
-            app.book_marks_previous();
+        KeyCode::Char('w') => {
+            app.book_marks_previous(false);
         }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
-            app.book_marks_next();
+        KeyCode::Char('W') => {
+            app.book_marks_previous(true);
+        }
+        KeyCode::Char('s') => {
+            app.book_marks_next(false);
+        }
+        KeyCode::Char('S') => {
+            app.book_marks_next(true);
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
             app.toggle_bookmark_expansion(true);

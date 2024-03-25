@@ -26,7 +26,10 @@ pub mod image;
 
 /// pdf page to jpeg cache
 pub mod cache;
-mod ro_cell;
+pub mod ro_cell;
+
+/// PDF file read history
+pub mod history;
 
 
 #[cfg(test)]
@@ -37,6 +40,12 @@ mod tests {
     #[test]
     fn book_mark_test() {
         let pdf_handler = PdfHandler::new("/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf");
+    }
 
+    #[test]
+    fn vec_test() {
+        let a = vec![3; 5];
+        let b = &a[0..];
+        println!("{b:?}");
     }
 }

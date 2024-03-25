@@ -42,14 +42,14 @@ pub struct App {
 
 impl App {
     /// Constructs a new instance of [`App`].
-    pub fn new(path: &str) -> Self {
+    pub fn new(path: &str, last_page: u32) -> Self {
         Self {
             running: true,
             pdf_handler: PdfHandler::new(path),
             image_handler: ImageHandler::new(),
             book_marks_state: ListState::default(),
             ui_book_marks: None,
-            cur_page: 1,
+            cur_page: last_page,
             already_render: false,
             loading: true,
             page_cache: FileCache::new(path.to_string()),
@@ -67,20 +67,56 @@ impl App {
         self.running = false;
     }
 
-    pub(crate) fn book_marks_previous(&mut self) {
+    pub(crate) fn book_marks_previous(&mut self, is_shift: bool) {
         if let Some(index) = self.book_marks_state.selected() {
-            if index > 0 {
-                self.book_marks_state.select(Some(index - 1));
+            if is_shift {
+                let ui_book_marks = self.ui_book_marks.as_ref().unwrap();
+                let mut final_index = index;
+                let origin_hierarchy = ui_book_marks[index].len();
+                loop {
+                    if final_index > 0 {
+                        final_index -= 1;
+                        let temp = &ui_book_marks[final_index];
+                        if temp.len() < origin_hierarchy || (temp.len() == 1 && origin_hierarchy == 1) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                self.book_marks_state.select(Some(final_index));
+            } else {
+                if index > 0 {
+                    self.book_marks_state.select(Some(index - 1));
+                }
             }
         } else {
             self.book_marks_state.select(Some(0));
         }
     }
 
-    pub(crate) fn book_marks_next(&mut self) {
+    pub(crate) fn book_marks_next(&mut self, is_shift: bool) {
         if let Some(index) = self.book_marks_state.selected() {
-            if index < self.ui_book_marks.as_ref().unwrap().len() - 1 {
-                self.book_marks_state.select(Some(index + 1));
+            let ui_book_marks = self.ui_book_marks.as_ref().unwrap();
+            if is_shift {
+                let mut final_index = index;
+                let origin_hierarchy = ui_book_marks[index].len();
+                loop {
+                    if final_index < ui_book_marks.len() - 1 {
+                        final_index += 1;
+                        let temp = &ui_book_marks[final_index];
+                        if temp.len() < origin_hierarchy || (temp.len() == 1 && origin_hierarchy == 1) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                self.book_marks_state.select(Some(final_index));
+            } else {
+                if index < ui_book_marks.len() - 1 {
+                    self.book_marks_state.select(Some(index + 1));
+                }
             }
         } else {
             self.book_marks_state.select(Some(0));
@@ -136,5 +172,15 @@ impl App {
         self.already_render = false;
         self.pdf_size.decrement();
         // clear screen
+    }
+
+    #[allow(dead_code)]
+    fn get_current_book_mark_index(&self) -> Option<&BookMarkIndex> {
+        if let Some(index) = self.book_marks_state.selected() {
+            if let Some(ui_book_marks) = self.ui_book_marks.as_ref() {
+                return Some(&ui_book_marks[index]);
+            }
+        }
+        None
     }
 }
