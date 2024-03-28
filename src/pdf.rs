@@ -1,11 +1,14 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::ops::Index;
 use std::path::Path;
+use std::rc::Rc;
 use lopdf::{Document, Object, ObjectId, Outline};
 use ratatui::prelude::Rect;
 use crate::decode::decode_str_to_utf8;
 
+pub type BookMarkType = Rc<RefCell<BookMark>>;
 
 #[derive(Debug, Clone)]
 pub struct BookMarkIndex {
@@ -16,8 +19,8 @@ pub struct BookMarkIndex {
 pub struct PdfSize {
     x: u16,
     y: u16,
-    width: f32,
-    height: f32,
+    width: i32,
+    height: i32,
 }
 
 #[derive(Debug)]
@@ -26,7 +29,9 @@ pub struct PdfHandler {
     // 页映射 对象Id => 页数
     page_map: BTreeMap<ObjectId, u32>,
     // 解析后的书签集合
-    book_marks: Vec<BookMark>,
+    book_marks: Vec<BookMarkType>,
+    // 无子目录的书签集合
+    book_marks_pages: Vec<BookMarkType>,
     // pdf 文件路径
     pdf_path: String,
     // 总页数
@@ -42,13 +47,21 @@ pub struct BookMark {
     /// 第几页
     num: u32,
     /// 子目录
-    sub: Vec<BookMark>,
+    sub: Vec<BookMarkType>,
     /// 目录层级
     hierarchy: u32,
     /// 是否展示
     pub show: bool,
     /// 子目录是否展示
     pub sub_show: bool,
+    /// 父级书签
+    pub parent: Option<BookMarkType>,
+}
+
+impl PartialEq for BookMark {
+    fn eq(&self, other: &Self) -> bool {
+        self.num == other.num
+    }
 }
 
 impl BookMark {
@@ -69,11 +82,11 @@ impl BookMark {
         self.num
     }
 
-    pub fn get_sub(&self) -> &Vec<BookMark> {
+    pub fn get_sub(&self) -> &Vec<BookMarkType> {
         &self.sub
     }
 
-    pub fn get_sub_mut(&mut self) -> &mut Vec<BookMark> {
+    pub fn get_sub_mut(&mut self) -> &mut Vec<BookMarkType> {
         &mut self.sub
     }
 
@@ -119,6 +132,7 @@ impl PdfHandler {
             pdf_path: path.to_string(),
             page_nums,
             title,
+            book_marks_pages: vec![],
         };
         pdf_handler.init();
         pdf_handler
@@ -128,7 +142,7 @@ impl PdfHandler {
         self.parse_book_marks();
     }
 
-    pub fn get_book_marks(&self) -> &Vec<BookMark> {
+    pub fn get_book_marks(&self) -> &Vec<BookMarkType> {
         &self.book_marks
     }
 
@@ -144,34 +158,24 @@ impl PdfHandler {
         &self.title
     }
 
-    pub fn find_book_mark(&self, index: &BookMarkIndex) -> Option<&BookMark> {
-        let mut bms: &Vec<BookMark> = &self.book_marks;
-        for i in 0..index.len() {
-            if let Some(bm) = bms.get(index[i]) {
-                if i == index.len() - 1 {
-                    return Some(bm);
-                }
-                bms = &bm.sub;
-            } else {
-                break;
-            }
-        }
-        None
-    }
 
-    pub fn find_book_mark_mut(&mut self, index: &BookMarkIndex) -> Option<&mut BookMark> {
-        let mut bms: &mut Vec<BookMark> = &mut self.book_marks;
+    pub fn find_book_mark(&self, index: &BookMarkIndex) -> Option<BookMarkType> {
+        let bms: &Vec<BookMarkType> = &self.book_marks;
+        let mut current: Option<BookMarkType> = None;
         for i in 0..index.len() {
-            if let Some(bm) = bms.get_mut(index[i]) {
-                if i == index.len() - 1 {
-                    return Some(bm);
+            match current {
+                Some(cur) => {
+                    match cur.borrow().sub.get(index[i]) {
+                        Some(book_mark) => {
+                            current = Some(book_mark.clone())
+                        }
+                        None => return None
+                    }
                 }
-                bms = &mut bm.sub;
-            } else {
-                break;
-            }
+                None => current = Some(bms.get(index[i]).unwrap().clone())
+            };
         }
-        None
+        current
     }
 
     /// 获取书签目录
@@ -181,11 +185,13 @@ impl PdfHandler {
         if let Some(outlines) = self.document.get_outlines(None, None, &mut map).unwrap() {
             self.parse_outlines(&outlines, &mut book_marks, 0);
         }
-        book_marks.push(BookMark::default().show(true));
+        let mut book_marks_pages = vec![];
+        self.map_book_marks_pages(&book_marks, &mut book_marks_pages);
         self.book_marks = book_marks;
+        self.book_marks_pages = book_marks_pages;
     }
 
-    pub fn parse_outlines(&self, outlines: &Vec<Outline>, book_marks: &mut Vec<BookMark>, hierarchy: u32) {
+    pub fn parse_outlines(&self, outlines: &Vec<Outline>, book_marks: &mut Vec<BookMarkType>, hierarchy: u32) {
         for outline in outlines.iter() {
             let mut book_mark = BookMark::default();
             match outline {
@@ -211,18 +217,89 @@ impl PdfHandler {
                     let mut sub_marks = vec![];
                     self.parse_outlines(os, &mut sub_marks, hierarchy + 1);
                     if let Some(last) = book_marks.last_mut() {
-                        last.sub = sub_marks;
+                        for sub in sub_marks.iter() {
+                            sub.borrow_mut().parent = Some(last.clone());
+                        }
+                        last.borrow_mut().sub = sub_marks;
                     }
                     continue;
                 }
             }
-            book_marks.push(book_mark);
+            book_marks.push(Rc::new(RefCell::new(book_mark)));
         }
+    }
+
+    pub fn map_book_marks_pages(&self, book_marks: &Vec<BookMarkType>, book_marks_pages: &mut Vec<BookMarkType>) {
+        for i in 0..book_marks.len() {
+            let marks = &book_marks[i];
+            {
+                let marks = marks.borrow();
+                if !marks.sub.is_empty() {
+                    self.map_book_marks_pages(&marks.sub, book_marks_pages);
+                    continue;
+                }
+            }
+            book_marks_pages.push(marks.clone());
+        }
+    }
+
+    pub fn find_book_mark_by_page_num(&self, page_num: u32) -> Option<BookMarkType> {
+        let len = self.book_marks_pages.len();
+        if len == 0 {
+            return None;
+        }
+        let res = {
+            let mut left = 0;
+            let mut right = len - 1;
+            let mut last_left: i32 = -1;
+            while left <= right {
+                let mid = (left + right) / 2;
+                let bm = self.book_marks_pages[mid].borrow();
+                if bm.num == page_num {
+                    return Some(self.book_marks_pages[mid].clone());
+                } else if bm.num > page_num {
+                    right = mid - 1;
+                } else {
+                    last_left = left as i32;
+                    left = left + 1;
+                }
+            }
+            if last_left == -1 {
+                self.book_marks_pages[left].clone()
+            } else if page_num > self.book_marks_pages[left].borrow().num {
+                self.book_marks_pages[left].clone()
+            } else {
+                self.book_marks_pages[last_left as usize].clone()
+            }
+        };
+        // show all parent bookmark
+        let mut book_mark = res.clone();
+        loop {
+            let parent: BookMarkType;
+            {
+                let bmb = book_mark.borrow();
+                if bmb.parent.is_none() {
+                    break;
+                }
+                parent = bmb.parent.clone().unwrap();
+            }
+            let mut pb = parent.borrow_mut();
+            if !pb.sub_show {
+                pb.sub_show = true;
+                for sub in pb.sub.iter() {
+                    sub.borrow_mut().show = true;
+                }
+            } else {
+                break;
+            }
+            book_mark = parent.clone();
+        }
+        Some(res)
     }
 }
 
 impl PdfSize {
-    pub fn new(width: f32, height: f32, x: u16, y: u16) -> Self {
+    pub fn new(width: i32, height: i32, x: u16, y: u16) -> Self {
         Self {
             width,
             height,
@@ -230,11 +307,11 @@ impl PdfSize {
             y,
         }
     }
-    pub fn width(&self) -> f32 {
+    pub fn width(&self) -> i32 {
         self.width
     }
 
-    pub fn height(&self) -> f32 {
+    pub fn height(&self) -> i32 {
         self.height
     }
 
@@ -247,13 +324,13 @@ impl PdfSize {
     }
 
     pub(crate) fn increment(&mut self) {
-        self.width *= 1.1;
-        self.height *= 1.1;
+        self.width = (self.width as f32 * 1.1) as i32;
+        self.height = (self.height as f32 * 1.1) as i32;
     }
 
     pub(crate) fn decrement(&mut self) {
-        self.width *= 0.9;
-        self.height *= 0.9;
+        self.width = (self.width as f32 * 0.9) as i32;
+        self.height = (self.height as f32 * 0.9) as i32;
     }
 
     pub(crate) fn update(&mut self, rect: &Rect) {

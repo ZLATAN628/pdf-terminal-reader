@@ -3,27 +3,34 @@ use pdf_terminal_reader::event::{Event, EventHandler};
 use pdf_terminal_reader::handler::handle_key_events;
 use pdf_terminal_reader::tui::Tui;
 use std::io;
+use anyhow::bail;
 use clap::Parser;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use pdf_terminal_reader::{emit};
 use pdf_terminal_reader::history::History;
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct AppArgs {
     /// pdf path
-    /// if None => last pdf
-    #[arg(short, long)]
+    /// if None => last read pdf
+    // #[arg(short, long)]
     path: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = AppArgs::parse();
-    let default_path = String::from("/Users/zlatan/Documents/电子书/rust-book-zh-cn-shieber.pdf");
-    let pdf_path = args.path.as_ref().unwrap_or(&default_path);
     let mut history = History::init();
+    let default_path = history.get_last_read_pdf();
+    if default_path.is_none() && args.path.is_none() {
+        bail!("please pass a pdf file path");
+    }
+    let pdf_path = match args.path.as_ref() {
+        Some(path) => path,
+        None => default_path.as_ref().unwrap()
+    };
     let mut app = App::new(pdf_path, history.read_last_page_num(pdf_path).unwrap_or(0));
 
     let backend = CrosstermBackend::new(io::stderr());
@@ -84,6 +91,6 @@ async fn main() -> anyhow::Result<()> {
     }
     // Exit the user interface.
     tui.exit()?;
-    history.save_page_num(pdf_path, app.cur_page);
+    history.save_history(pdf_path, app.cur_page);
     Ok(())
 }

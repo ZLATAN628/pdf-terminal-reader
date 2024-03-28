@@ -8,7 +8,7 @@ use ratatui::widgets::{Borders, List, ListItem, Paragraph};
 
 use crate::app::{App, AppState};
 use crate::emit;
-use crate::pdf::{BookMark, BookMarkIndex};
+use crate::pdf::{BookMarkIndex, BookMarkType};
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -93,7 +93,11 @@ fn render_catalog(app: &mut App, frame: &mut Frame, chunk: Rect) {
     let mut items: Vec<ListItem> = vec![];
     let mut index_vec: Vec<BookMarkIndex> = vec![];
     let mut cur_index: Vec<usize> = vec![];
-    parse_book_marks_item(book_marks, &mut items, &mut index_vec, &mut cur_index);
+    let mut total_index = 0;
+    let index = parse_book_marks_item(book_marks, &mut items, &mut index_vec, &mut cur_index, app.cur_book_mark.take().clone(), &mut total_index);
+    if index != -1 {
+        app.book_marks_state.select(Some(index as usize));
+    }
     app.ui_book_marks = Some(index_vec);
     let list_widget = List::new(items)
         .block(Block::default().title(app.pdf_handler.get_title().as_str()).borders(Borders::RIGHT))
@@ -102,13 +106,22 @@ fn render_catalog(app: &mut App, frame: &mut Frame, chunk: Rect) {
     frame.render_stateful_widget(list_widget, chunk, &mut app.book_marks_state);
 }
 
-fn parse_book_marks_item(book_marks: &Vec<BookMark>, items: &mut Vec<ListItem>,
-                         index_vec: &mut Vec<BookMarkIndex>, cur_index: &mut Vec<usize>) {
+fn parse_book_marks_item(book_marks: &Vec<BookMarkType>, items: &mut Vec<ListItem>,
+                         index_vec: &mut Vec<BookMarkIndex>, cur_index: &mut Vec<usize>,
+                         cur_book_mark: Option<BookMarkType>, total_index: &mut i32) -> i32 {
     let mut index = 0;
+    let mut result = -1;
     for bm in book_marks {
+        let bm = bm.borrow();
         if !bm.is_show() {
             continue;
         }
+        if let Some(cbm) = cur_book_mark.clone() {
+            if *cbm.borrow() == *bm {
+                result = *total_index;
+            }
+        }
+
         cur_index.push(index);
         let sub_symbol =
             if bm.is_sub_show() { String::from(" ▼") } else if !bm.get_sub().is_empty() { String::from(" ▶") } else { String::new() };
@@ -118,10 +131,16 @@ fn parse_book_marks_item(book_marks: &Vec<BookMark>, items: &mut Vec<ListItem>,
         ));
         items.push(ListItem::new(item));
         index_vec.push(BookMarkIndex::from(cur_index.clone()));
+        *total_index += 1;
         if !bm.get_sub().is_empty() {
-            parse_book_marks_item(bm.get_sub(), items, index_vec, cur_index);
+            let temp = parse_book_marks_item(bm.get_sub(), items, index_vec, cur_index, cur_book_mark.clone(), total_index);
+            if result == -1 {
+                result = temp;
+            }
         }
+
         index += 1;
         cur_index.pop();
     }
+    return result;
 }

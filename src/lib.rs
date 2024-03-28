@@ -1,5 +1,8 @@
 extern crate core;
 
+use std::fs;
+use std::path::Path;
+
 /// Application.
 pub mod app;
 
@@ -30,6 +33,10 @@ pub mod ro_cell;
 
 /// PDF file read history
 pub mod history;
+
+pub fn write_log(log: String) {
+    fs::write(Path::new("./pdf.log"), log).unwrap();
+}
 
 
 #[cfg(test)]

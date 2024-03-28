@@ -1,7 +1,7 @@
 use ratatui::widgets::ListState;
 use crate::cache::FileCache;
 use crate::image::ImageHandler;
-use crate::pdf::{BookMarkIndex, PdfHandler, PdfSize};
+use crate::pdf::{BookMarkIndex, BookMarkType, PdfHandler, PdfSize};
 
 #[derive(Debug, Clone)]
 pub enum AppState {
@@ -25,6 +25,8 @@ pub struct App {
     pub ui_book_marks: Option<Vec<BookMarkIndex>>,
     /// current page
     pub cur_page: u32,
+    /// current book_mark
+    pub cur_book_mark: Option<BookMarkType>,
     /// Is the pdf already render?
     pub already_render: bool,
     /// loading pdf?
@@ -50,10 +52,11 @@ impl App {
             book_marks_state: ListState::default(),
             ui_book_marks: None,
             cur_page: last_page,
+            cur_book_mark: None,
             already_render: false,
             loading: true,
             page_cache: FileCache::new(path.to_string()),
-            pdf_size: PdfSize::new(1200.0, 1500.0, 0, 0),
+            pdf_size: PdfSize::new(1200, 1500, 0, 0),
             next_load_page: 2,
             app_state: AppState::Normal,
         }
@@ -127,11 +130,12 @@ impl App {
         if let Some(index) = self.book_marks_state.selected() {
             if let Some(ui_book_marks) = self.ui_book_marks.as_ref() {
                 let index = &ui_book_marks[index];
-                let book_mark = self.pdf_handler.find_book_mark_mut(index).unwrap();
+                let book_mark_type = self.pdf_handler.find_book_mark(index).unwrap();
+                let mut book_mark = book_mark_type.borrow_mut();
                 if !book_mark.get_sub().is_empty() {
                     book_mark.sub_show = show;
-                    for bm in book_mark.get_sub_mut().iter_mut() {
-                        bm.show = show;
+                    for bm in book_mark.get_sub().iter() {
+                        bm.borrow_mut().show = show;
                     }
                 }
             }
@@ -143,7 +147,7 @@ impl App {
             if let Some(ui_book_marks) = self.ui_book_marks.as_ref() {
                 let index = &ui_book_marks[index];
                 let book_mark = self.pdf_handler.find_book_mark(index).unwrap();
-                self.cur_page = book_mark.get_num();
+                self.cur_page = book_mark.borrow().get_num();
                 self.already_render = false;
             }
         }
@@ -153,6 +157,8 @@ impl App {
         if self.cur_page < self.pdf_handler.get_page_nums() as u32 {
             self.cur_page += 1;
             self.already_render = false;
+            self.cur_book_mark = self.pdf_handler.find_book_mark_by_page_num(self.cur_page);
+
         }
     }
 
@@ -160,6 +166,7 @@ impl App {
         if self.cur_page > 0 {
             self.cur_page -= 1;
             self.already_render = false;
+            self.cur_book_mark = self.pdf_handler.find_book_mark_by_page_num(self.cur_page);
         }
     }
 
